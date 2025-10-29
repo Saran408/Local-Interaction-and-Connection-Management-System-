@@ -1,0 +1,186 @@
+{% comment %} {% load static %}
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
+    <div class="container">
+        <a class="navbar-brand" href="{% url 'home' %}">
+            <i class="fas fa-users me-2"></i>LocalConnect
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav me-auto">
+                <li class="nav-item">
+                    <a class="nav-link {% if request.path == '/' %}active{% endif %}" href="{% url 'home' %}">Home</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if request.path == '/jobs/' %}active{% endif %}" href="{% url 'job-list' %}">Jobs</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'map-view' %}">Map</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if request.path == '/chat/' %}active{% endif %}" href="{% url 'chat' %}">Chat</a>
+                </li>
+            </ul>
+            <div class="navbar-nav">
+                <div class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown">
+                        {% if profile.profile_image %}
+                            <img src="{{ profile.profile_image.url }}" class="navbar-profile-image rounded-circle me-2" alt="Profile">
+                        {% else %}
+                            <img src="https://ui-avatars.com/api/?name={{ request.user.username }}" class="navbar-profile-image rounded-circle me-2" alt="Profile">
+                        {% endif %}
+                        <span>{{ request.user.username }}</span>
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="{% url 'profile' %}"><i class="fas fa-user me-2"></i>Profile</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="{% url 'logout' %}"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</nav> {% endcomment %}
+
+
+
+
+
+
+{% comment %} {% load static %}
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
+    <div class="container">
+        <a class="navbar-brand" href="{% url 'home' %}">
+            <i class="fas fa-users me-2"></i>LocalConnect
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav me-auto">
+                <li class="nav-item"><a class="nav-link {% if request.path == '/' %}active{% endif %}" href="{% url 'home' %}">Home</a></li>
+                
+                <li class="nav-item">
+                    <a class="nav-link {% if request.path == '/jobs/' %}{% endif %}" href="{% url 'job-list' %}">Jobs</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'map-view' %}">Map</a>
+                </li>
+                <li class="nav-item"><a class="nav-link {% if request.path == '/chats/' %}active{% endif %}" href="{% url 'chat-list' %}">Chat</a></li>
+            </ul>
+            <div class="navbar-nav">
+                <div class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown">
+                        {% if request.user.is_authenticated %}
+                            <img src="https://ui-avatars.com/api/?name={{ request.user.username }}" class="navbar-profile-image rounded-circle me-2" alt="Profile">
+                            <span>{{ request.user.username }}</span>
+                        {% else %}
+                            Guest
+                        {% endif %}
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="{% url 'logout' %}">Logout</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</nav> {% endcomment %}
+
+
+
+
+
+
+{% load static %}
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
+  <div class="container">
+    <!-- Brand -->
+    <a class="navbar-brand" href="{% url 'home' %}">
+      <i class="fas fa-users me-2"></i>LocalConnect
+    </a>
+
+    <!-- Mobile toggle -->
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <!-- Navigation -->
+    <div class="collapse navbar-collapse" id="navbarNav">
+      <ul class="navbar-nav me-auto">
+        <li class="nav-item">
+          <a class="nav-link {% if request.path == '/' %}active{% endif %}" href="{% url 'home' %}">Home</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.path == '/jobs/' %}active{% endif %}" href="{% url 'job-list' %}">Jobs</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.path == '/map/' %}active{% endif %}" href="{% url 'map-view' %}">Map</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.path == '/chats/' %}active{% endif %}" href="{% url 'chat-list' %}">Chat</a>
+        </li>
+      </ul>
+
+      <!-- Profile dropdown -->
+      <div class="navbar-nav">
+        <div class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown">
+
+            {% if request.user.is_authenticated %}
+              {% if request.user.profile.profile_image %}
+                <img src="{{ request.user.profile.profile_image.url }}" class="navbar-profile-image rounded-circle me-2" alt="Profile">
+              {% else %}
+                <img src="https://ui-avatars.com/api/?name={{ request.user.username }}" class="navbar-profile-image rounded-circle me-2" alt="Avatar">
+              {% endif %}
+              <span>{{ request.user.username }}</span>
+            {% else %}
+              Guest
+            {% endif %}
+          </a>
+
+          <ul class="dropdown-menu dropdown-menu-end">
+            {% if request.user.is_authenticated %}
+              <li><a class="dropdown-item" href="{% url 'profile' %}"><i class="fas fa-user me-2"></i>Profile</a></li>
+                            {% comment %} <li><a class="dropdown-item" href="#"><i class="fas fa-cog me-2"></i>Settings</a></li> {% endcomment %}
+              <li><hr class="dropdown-divider"></li>
+              <li><a class="dropdown-item" href="{% url 'logout' %}">Logout</a></li>
+            {% else %}
+              <li><a class="dropdown-item" href="{% url 'login' %}">Login</a></li>
+            {% endif %}
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<!-- Styling -->
+<style>
+  .navbar-profile-image {
+    width: 40px;
+    height: 40px;
+    object-fit: cover;
+    {% comment %} border-radius: 50%;
+    border: 2px solid white; {% endcomment %}
+  }
+
+  .navbar .nav-link {
+    color: #f8f9fa !important;
+    transition: 0.3s;
+  }
+
+  .navbar .nav-link.active {
+    background-color: rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    font-weight: bold;
+  }
+
+  .dropdown-menu {
+    border-radius: 8px;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+  }
+</style>
+

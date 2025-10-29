@@ -1,0 +1,1006 @@
+{% comment %} {% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Map - LocalConnect</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+</head>
+
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
+        <div class="container">
+            <a class="navbar-brand" href="{% url 'home' %}">
+                <i class="fas fa-users me-2"></i>LocalConnect
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item"><a class="nav-link" href="{% url 'home' %}">Home</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="{% url 'map-view' %}">Map</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'job-list' %}">Jobs</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'chat_page' %}">Chat</a></li>
+                </ul>
+                <div class="navbar-nav">
+                    <div class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown">
+                            <img src="https://ui-avatars.com/api/?name={{ request.user.username }}&background=random" alt="Profile" class="rounded-circle me-2" width="32" height="32">
+                            <span>{{ request.user.username }}</span>
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{% url 'home' %}"><i class="fas fa-user me-2"></i>Profile</a></li>
+                            <li><a class="dropdown-item" href="#"><i class="fas fa-cog me-2"></i>Settings</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{% url 'home' %}"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container-fluid px-0">
+        <div class="row g-0">
+            <!-- Map Column -->
+            <div class="col-md-8">
+                <div id="map" style="height: calc(100vh - 76px);"></div>
+            </div>
+
+            <!-- Sidebar Column -->
+            <div class="col-md-4">
+                <div class="p-3 border-bottom bg-light">
+                    <h5>Local Items & Services</h5>
+                    <div class="input-group mb-2">
+                        <input type="text" class="form-control" placeholder="Search on map..." id="mapSearchInput">
+                        <button class="btn btn-primary" type="button"><i class="fas fa-search"></i></button>
+                    </div>
+                    <select class="form-select" id="mapCategoryFilter">
+                        <option value="">All Categories</option>
+                        <option value="sale">For Sale</option>
+                        <option value="service">Services</option>
+                        <option value="event">Events</option>
+                        <option value="help">Help Wanted</option>
+                    </select>
+                </div>
+                <div class="p-3" id="mapItemsList" style="max-height: calc(100vh - 200px); overflow-y: auto;">
+                    <!-- Items loaded via JS -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Item Details Modal -->
+    <div class="modal fade" id="itemDetailsModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="itemModalTitle">Item Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="itemModalBody"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" onclick="location.href='{% url 'chat_page' %}'">
+                        <i class="fas fa-comment me-1"></i>Chat with Seller
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script>
+        const mapItems = [
+            {% for item in items %}
+            {
+                id: {{ item.id }},
+                title: "{{ item.title|escapejs }}",
+                description: "{{ item.description|escapejs }}",
+                location: "{{ item.location|escapejs }}",
+                category: "{{ item.category }}",
+                price: {{ item.price|default:"null" }},
+                image: "{% if item.image %}{{ item.image.url }}{% else %}''{% endif %}",
+                lat: {{ item.latitude|default:"20.5937" }},
+                lng: {{ item.longitude|default:"78.9629" }},
+                user: "{% if item.posted_by %}{{ item.posted_by.username }}{% else %}Unknown{% endif %}",
+                timestamp: "{{ item.timestamp|timesince }} ago"
+            },
+            {% endfor %}
+        ];
+
+        let map;
+        let markers = [];
+
+        function initMap() {
+            map = L.map('map').setView([20.5937, 78.9629], 5);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            mapItems.forEach(item => {
+                const marker = L.marker([item.lat, item.lng])
+                    .addTo(map)
+                    .bindPopup(`
+                        <div>
+                            <h6>${item.title}</h6>
+                            <p class="mb-1">${item.description.substring(0, 50)}...</p>
+                            ${item.price ? `<p class="mb-1 fw-bold">₹${item.price}</p>` : ''}
+                            <button class="btn btn-sm btn-primary mt-1" onclick="showItemDetails(${item.id})">
+                                View Details
+                            </button>
+                        </div>
+                    `);
+                markers.push({ id: item.id, marker: marker });
+            });
+
+            displayMapItems(mapItems);
+        }
+
+        function displayMapItems(items) {
+            const container = document.getElementById('mapItemsList');
+            container.innerHTML = '';
+            items.forEach(item => {
+                const itemHtml = `
+                    <div class="card mb-3 map-item-card" data-id="${item.id}">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <span class="badge bg-primary">${item.category.charAt(0).toUpperCase() + item.category.slice(1)}</span>
+                                ${item.price ? `<span class="fw-bold text-success">₹${item.price}</span>` : ''}
+                            </div>
+                            <h6 class="card-title">${item.title}</h6>
+                            <p class="card-text small">${item.description}</p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <small class="text-muted">
+                                    <i class="fas fa-map-marker-alt me-1"></i>${item.location}
+                                </small>
+                                <button class="btn btn-sm btn-outline-primary" onclick="showItemDetails(${item.id})">
+                                    Details
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.innerHTML += itemHtml;
+            });
+        }
+
+        function showItemDetails(itemId) {
+            const item = mapItems.find(i => i.id === itemId);
+            if (!item) return;
+            document.getElementById('itemModalTitle').textContent = item.title;
+
+            let modalBody = `
+                ${item.image ? `<img src="${item.image}" class="img-fluid rounded mb-3" alt="${item.title}">` : ''}
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <span class="badge bg-primary">${item.category.charAt(0).toUpperCase() + item.category.slice(1)}</span>
+                    ${item.price ? `<span class="fw-bold text-success">₹${item.price}</span>` : ''}
+                </div>
+                <p>${item.description}</p>
+                <div class="mb-2"><small class="text-muted"><i class="fas fa-map-marker-alt me-1"></i>${item.location}</small></div>
+                <div class="mb-2"><small class="text-muted">Posted by ${item.user}</small></div>
+                <div><small class="text-muted">${item.timestamp}</small></div>
+            `;
+
+            document.getElementById('itemModalBody').innerHTML = modalBody;
+            const modal = new bootstrap.Modal(document.getElementById('itemDetailsModal'));
+            modal.show();
+            map.setView([item.lat, item.lng], 13);
+        }
+
+        document.getElementById('mapCategoryFilter').addEventListener('change', function() {
+            const category = this.value;
+            if (category === '') {
+                markers.forEach(m => m.marker.addTo(map));
+                displayMapItems(mapItems);
+            } else {
+                const filteredItems = mapItems.filter(item => item.category === category);
+                markers.forEach(m => map.removeLayer(m.marker));
+                markers.forEach(m => { if (filteredItems.some(item => item.id === m.id)) m.marker.addTo(map); });
+                displayMapItems(filteredItems);
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', initMap);
+    </script>
+</body>
+</html> {% endcomment %}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+{% comment %} {% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Map - LocalConnect</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <style>
+        .profile-image { width: 150px; height: 150px; object-fit: cover; }
+        .navbar-profile-image { width: 32px; height: 32px; object-fit: cover; }
+    </style>
+</head>
+
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
+        <div class="container">
+            <a class="navbar-brand" href="{% url 'home' %}">
+                <i class="fas fa-users me-2"></i>LocalConnect
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item"><a class="nav-link" href="{% url 'home' %}">Home</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'job-list' %}">Jobs</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="{% url 'map-view' %}">Map</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'chat-list' %}">Chat</a></li>
+                </ul>
+                <div class="navbar-nav">
+                    <div class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown">
+                            {% if profile.profile_image %}
+                                <img src="{{ profile.profile_image.url }}" class="navbar-profile-image rounded-circle me-2" alt="Profile">
+                            {% else %}
+                                <img src="https://ui-avatars.com/api/?name={{ request.user.username }}" class="navbar-profile-image rounded-circle me-2" alt="Profile">
+                            {% endif %}
+                            <span>{{ request.user.username }}</span>
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{% url 'profile' %}"><i class="fas fa-user me-2"></i>Profile</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{% url 'logout' %}"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container-fluid px-0">
+        <div class="row g-0">
+            <!-- Map Column -->
+            <div class="col-md-8">
+                <div id="map" style="height: calc(100vh - 76px);"></div>
+            </div>
+
+            <!-- Sidebar Column -->
+            <div class="col-md-4">
+                <div class="p-3 border-bottom bg-light">
+                    <h5>Local Items & Services</h5>
+                    <div class="input-group mb-2">
+                        <input type="text" class="form-control" placeholder="Search on map..." id="mapSearchInput">
+                        <button class="btn btn-primary" type="button">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                    <select class="form-select" id="mapCategoryFilter">
+                        <option value="">All Categories</option>
+                        <option value="sale">For Sale</option>
+                        <option value="service">Services</option>
+                        <option value="event">Events</option>
+                        <option value="help">Help Wanted</option>
+                    </select>
+                </div>
+                <div class="p-3" id="mapItemsList" style="max-height: calc(100vh - 200px); overflow-y: auto;">
+                    <!-- Items loaded via JS -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Item Details Modal -->
+    <div class="modal fade" id="itemDetailsModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="itemModalTitle">Item Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="itemModalBody"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="chatWithSellerBtn">
+                        <i class="fas fa-comment me-1"></i>Chat with Seller
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+
+    <script>
+        const mapItems = [
+            {% for post in items %}
+            {
+                id: {{ post.id }},
+                title: "{{ post.title|escapejs }}",
+                description: "{{ post.description|escapejs }}",
+                location: "{{ post.location|escapejs }}",
+                category: "{{ post.category }}",
+                price: {{ post.price|default:"null" }},
+                image: "{% if post.image %}{{ post.image.url }}{% else %}''{% endif %}",
+                lat: {{ post.latitude }},
+                lng: {{ post.longitude }},
+                user: "{{ post.user.username|default:'Anonymous' }}",
+                timestamp: "{{ post.timestamp|timesince }} ago"
+            },
+            {% endfor %}
+        ];
+
+        let map;
+        let markers = [];
+
+        function initMap() {
+            map = L.map('map').setView([20.5937, 78.9629], 5);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(map);
+
+            mapItems.forEach(item => {
+                const marker = L.marker([item.lat, item.lng])
+                    .addTo(map)
+                    .bindPopup(`<div>
+                        <h6>${item.title}</h6>
+                        <p class="mb-1">${item.description.substring(0,50)}...</p>
+                        ${item.price ? `<p class="mb-1 fw-bold">₹${item.price}</p>` : ''}
+                        <button class="btn btn-sm btn-primary mt-1" onclick="showItemDetails(${item.id})">View Details</button>
+                    </div>`);
+                markers.push({ id: item.id, marker: marker });
+            });
+
+            displayMapItems(mapItems);
+        }
+
+        function displayMapItems(items) {
+            const container = document.getElementById('mapItemsList');
+            container.innerHTML = '';
+            items.forEach(item => {
+                container.innerHTML += `
+                    <div class="card mb-3 map-item-card" data-id="${item.id}">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <span class="badge bg-primary">${item.category.charAt(0).toUpperCase() + item.category.slice(1)}</span>
+                                ${item.price ? `<span class="fw-bold text-success">₹${item.price}</span>` : ''}
+                            </div>
+                            <h6 class="card-title">${item.title}</h6>
+                            <p class="card-text small">${item.description}</p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <small class="text-muted"><i class="fas fa-map-marker-alt me-1"></i>${item.location}</small>
+                                <button class="btn btn-sm btn-outline-primary" onclick="showItemDetails(${item.id})">Details</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function showItemDetails(itemId) {
+            const item = mapItems.find(i => i.id === itemId);
+            if (!item) return;
+            document.getElementById('itemModalTitle').textContent = item.title;
+            document.getElementById('itemModalBody').innerHTML = `
+                ${item.image ? `<img src="${item.image}" class="img-fluid rounded mb-3" alt="${item.title}">` : ''}
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <span class="badge bg-primary">${item.category.charAt(0).toUpperCase() + item.category.slice(1)}</span>
+                    ${item.price ? `<span class="fw-bold text-success">₹${item.price}</span>` : ''}
+                </div>
+                <p>${item.description}</p>
+                <div class="mb-2"><small class="text-muted"><i class="fas fa-map-marker-alt me-1"></i>${item.location}</small></div>
+                <div class="mb-2"><small class="text-muted">Posted by ${item.user}</small></div>
+                <div><small class="text-muted">${item.timestamp}</small></div>
+            `;
+
+            // Set dynamic chat button
+            const chatBtn = document.getElementById('chatWithSellerBtn');
+            chatBtn.onclick = function() {
+                window.location.href = `/chat/${item.user}/`;
+            };
+
+            const modal = new bootstrap.Modal(document.getElementById('itemDetailsModal'));
+            modal.show();
+            map.setView([item.lat, item.lng], 13);
+        }
+
+        function filterItems() {
+            const searchQuery = document.getElementById('mapSearchInput').value.toLowerCase();
+            const selectedCategory = document.getElementById('mapCategoryFilter').value;
+
+            const filteredItems = mapItems.filter(item => {
+                const matchesSearch = item.title.toLowerCase().includes(searchQuery) 
+                                    || item.description.toLowerCase().includes(searchQuery) 
+                                    || item.location.toLowerCase().includes(searchQuery);
+                const matchesCategory = selectedCategory === '' || item.category === selectedCategory;
+                return matchesSearch && matchesCategory;
+            });
+
+            markers.forEach(m => map.removeLayer(m.marker));
+            markers.forEach(m => { if (filteredItems.some(item => item.id === m.id)) m.marker.addTo(map); });
+
+            displayMapItems(filteredItems);
+
+            if (filteredItems.length > 0) {
+                map.setView([filteredItems[0].lat, filteredItems[0].lng], 13);
+            }
+        }
+
+        document.getElementById('mapSearchInput').addEventListener('input', filterItems);
+        document.getElementById('mapCategoryFilter').addEventListener('change', filterItems);
+        document.addEventListener('DOMContentLoaded', initMap);
+    </script>
+</body>
+</html> {% endcomment %}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+{% comment %} {% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Map - LocalConnect</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <style>
+        .profile-image { width: 150px; height: 150px; object-fit: cover; }
+        .navbar-profile-image { width: 32px; height: 32px; object-fit: cover; }
+    </style>
+</head>
+
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
+        <div class="container">
+            <a class="navbar-brand" href="{% url 'home' %}">
+                <i class="fas fa-users me-2"></i>LocalConnect
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'home' %}">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'job-list' %}">Jobs</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="{% url 'map-view' %}">Map</a>
+                    </li>
+                    
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'chat-list' %}">Chat</a>
+                    </li>
+                </ul>
+                <div class="navbar-nav">
+                    <div class="nav-item dropdown">
+                        
+                        <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown">
+                            {% if profile.profile_image %}
+                                <img src="{{ profile.profile_image.url }}" class="navbar-profile-image rounded-circle me-2" alt="Profile">
+                            {% else %}
+                                <img src="https://ui-avatars.com/api/?name={{ request.user.username }}" class="navbar-profile-image rounded-circle me-2" alt="Profile">
+                            {% endif %}
+                            <span>{{ request.user.username }}</span>
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{% url 'profile' %}"><i class="fas fa-user me-2"></i>Profile</a></li>
+                            
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{% url 'logout' %}"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container-fluid px-0">
+        <div class="row g-0">
+            <!-- Map Column -->
+            <div class="col-md-8">
+                <div id="map" style="height: calc(100vh - 76px);"></div>
+            </div>
+
+            <!-- Sidebar Column -->
+            <div class="col-md-4">
+                <div class="p-3 border-bottom bg-light">
+                    <h5>Local Items & Services</h5>
+                    <div class="input-group mb-2">
+                        <input type="text" class="form-control" placeholder="Search on map..." id="mapSearchInput">
+                        <button class="btn btn-primary" type="button">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                    <select class="form-select" id="mapCategoryFilter">
+                        <option value="">All Categories</option>
+                        <option value="sale">For Sale</option>
+                        <option value="service">Services</option>
+                        <option value="event">Events</option>
+                        <option value="help">Help Wanted</option>
+                    </select>
+                </div>
+                <div class="p-3" id="mapItemsList" style="max-height: calc(100vh - 200px); overflow-y: auto;">
+                    <!-- Items loaded via JS -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Item Details Modal -->
+    <div class="modal fade" id="itemDetailsModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="itemModalTitle">Item Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="itemModalBody"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" onclick="location.href='{% url 'chat' %}'">
+                        <i class="fas fa-comment me-1"></i>Chat with Seller
+                    </button> 
+                    
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+
+    <script>
+        const mapItems = [
+            {% for post in items %}
+            {
+                id: {{ post.id }},
+                title: "{{ post.title|escapejs }}",
+                description: "{{ post.description|escapejs }}",
+                location: "{{ post.location|escapejs }}",
+                category: "{{ post.category }}",
+                price: {{ post.price|default:"null" }},
+                image: "{% if post.image %}{{ post.image.url }}{% else %}''{% endif %}",
+                lat: {{ post.latitude }},
+                lng: {{ post.longitude }},
+                user: "{% if post.user %}{{ post.user.username }}{% else %}Anonymous{% endif %}",
+                timestamp: "{{ post.timestamp|timesince }} ago"
+            },
+            {% endfor %}
+        ];
+
+        let map;
+        let markers = [];
+
+        function initMap() {
+            map = L.map('map').setView([20.5937, 78.9629], 5);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            mapItems.forEach(item => {
+                const marker = L.marker([item.lat, item.lng])
+                    .addTo(map)
+                    .bindPopup(`<div>
+                        <h6>${item.title}</h6>
+                        <p class="mb-1">${item.description.substring(0,50)}...</p>
+                        ${item.price ? `<p class="mb-1 fw-bold">₹${item.price}</p>` : ''}
+                        <button class="btn btn-sm btn-primary mt-1" onclick="showItemDetails(${item.id})">View Details</button>
+                    </div>`);
+                markers.push({ id: item.id, marker: marker });
+            });
+
+            displayMapItems(mapItems);
+        }
+
+        function displayMapItems(items) {
+            const container = document.getElementById('mapItemsList');
+            container.innerHTML = '';
+            items.forEach(item => {
+                container.innerHTML += `
+                    <div class="card mb-3 map-item-card" data-id="${item.id}">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <span class="badge bg-primary">${item.category.charAt(0).toUpperCase() + item.category.slice(1)}</span>
+                                ${item.price ? `<span class="fw-bold text-success">₹${item.price}</span>` : ''}
+                            </div>
+                            <h6 class="card-title">${item.title}</h6>
+                            <p class="card-text small">${item.description}</p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <small class="text-muted"><i class="fas fa-map-marker-alt me-1"></i>${item.location}</small>
+                                <button class="btn btn-sm btn-outline-primary" onclick="showItemDetails(${item.id})">Details</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function showItemDetails(itemId) {
+            const item = mapItems.find(i => i.id === itemId);
+            if (!item) return;
+            document.getElementById('itemModalTitle').textContent = item.title;
+            document.getElementById('itemModalBody').innerHTML = `
+                ${item.image ? `<img src="${item.image}" class="img-fluid rounded mb-3" alt="${item.title}">` : ''}
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <span class="badge bg-primary">${item.category.charAt(0).toUpperCase() + item.category.slice(1)}</span>
+                    ${item.price ? `<span class="fw-bold text-success">₹${item.price}</span>` : ''}
+                </div>
+                <p>${item.description}</p>
+                <div class="mb-2"><small class="text-muted"><i class="fas fa-map-marker-alt me-1"></i>${item.location}</small></div>
+                <div class="mb-2"><small class="text-muted">Posted by ${item.user}</small></div>
+                <div><small class="text-muted">${item.timestamp}</small></div>
+            `;
+            const modal = new bootstrap.Modal(document.getElementById('itemDetailsModal'));
+            modal.show();
+            map.setView([item.lat, item.lng], 13);
+        }
+
+        function filterItems() {
+            const searchQuery = document.getElementById('mapSearchInput').value.toLowerCase();
+            const selectedCategory = document.getElementById('mapCategoryFilter').value;
+
+            const filteredItems = mapItems.filter(item => {
+                const matchesSearch = item.title.toLowerCase().includes(searchQuery) 
+                                    || item.description.toLowerCase().includes(searchQuery) 
+                                    || item.location.toLowerCase().includes(searchQuery);
+                const matchesCategory = selectedCategory === '' || item.category === selectedCategory;
+                return matchesSearch && matchesCategory;
+            });
+
+            markers.forEach(m => map.removeLayer(m.marker));
+            markers.forEach(m => { if (filteredItems.some(item => item.id === m.id)) m.marker.addTo(map); });
+
+            displayMapItems(filteredItems);
+
+            if (filteredItems.length > 0) {
+                map.setView([filteredItems[0].lat, filteredItems[0].lng], 13);
+            }
+        }
+
+        document.getElementById('mapSearchInput').addEventListener('input', filterItems);
+        document.getElementById('mapCategoryFilter').addEventListener('change', filterItems);
+
+        document.addEventListener('DOMContentLoaded', initMap);
+    </script>
+</body>
+</html> {% endcomment %}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Map - LocalConnect</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <style>
+        .profile-image { width: 150px; height: 150px; object-fit: cover; }
+        .navbar-profile-image { width: 32px; height: 32px; object-fit: cover; }
+    </style>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
+        <div class="container">
+            <a class="navbar-brand" href="{% url 'home' %}">
+                <i class="fas fa-users me-2"></i>LocalConnect
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item"><a class="nav-link" href="{% url 'home' %}">Home</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'job-list' %}">Jobs</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="{% url 'map-view' %}">Map</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'chat-list' %}">Chat</a></li>
+                </ul>
+                <div class="navbar-nav">
+                    <div class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown">
+                            {% if profile.profile_image %}
+                                <img src="{{ profile.profile_image.url }}" class="navbar-profile-image rounded-circle me-2" alt="Profile">
+                            {% else %}
+                                <img src="https://ui-avatars.com/api/?name={{ request.user.username }}" class="navbar-profile-image rounded-circle me-2" alt="Profile">
+                            {% endif %}
+                            <span>{{ request.user.username }}</span>
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{% url 'profile' %}"><i class="fas fa-user me-2"></i>Profile</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{% url 'logout' %}"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Layout -->
+    <div class="container-fluid px-0">
+        <div class="row g-0">
+            <!-- Map Section -->
+            <div class="col-md-8">
+                <div id="map" style="height: calc(100vh - 76px);"></div>
+            </div>
+
+            <!-- Sidebar Section -->
+            <div class="col-md-4">
+                <div class="p-3 border-bottom bg-light">
+                    <h5>Local Items & Services</h5>
+                    <div class="input-group mb-2">
+                        <input type="text" class="form-control" placeholder="Search on map..." id="mapSearchInput">
+                        <button class="btn btn-primary" type="button"><i class="fas fa-search"></i></button>
+                    </div>
+                    <select class="form-select" id="mapCategoryFilter">
+                        <option value="">All Categories</option>
+                        <option value="sale">For Sale</option>
+                        <option value="service">Services</option>
+                        <option value="event">Events</option>
+                        <option value="help">Help Wanted</option>
+                    </select>
+                </div>
+                <div class="p-3" id="mapItemsList" style="max-height: calc(100vh - 200px); overflow-y: auto;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div class="modal fade" id="itemDetailsModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="itemModalTitle">Item Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="itemModalBody"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <a id="chatWithSellerBtn" class="btn btn-primary">
+                        <i class="fas fa-comment me-1"></i>Chat with Seller
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+
+    <script>
+        const mapItems = [
+            {% for post in items %}
+            {
+                id: {{ post.id }},
+                title: "{{ post.title|escapejs }}",
+                description: "{{ post.description|escapejs }}",
+                location: "{{ post.location|escapejs }}",
+                category: "{{ post.category }}",
+                price: {{ post.price|default:"null" }},
+                image: "{% if post.image %}{{ post.image.url }}{% else %}''{% endif %}",
+                lat: {{ post.latitude }},
+                lng: {{ post.longitude }},
+                user: "{{ post.user|escapejs }}",
+                timestamp: "{{ post.timestamp|timesince }} ago"
+            },
+            {% endfor %}
+        ];
+
+        let map, markers = [];
+
+        function initMap() {
+            map = L.map('map').setView([20.5937, 78.9629], 5);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(map);
+
+            mapItems.forEach(item => {
+                const marker = L.marker([item.lat, item.lng]).addTo(map).bindPopup(`
+                    <div>
+                        <h6>${item.title}</h6>
+                        <p class="mb-1">${item.description.substring(0, 50)}...</p>
+                        ${item.price ? `<p class="fw-bold text-success">₹${item.price}</p>` : ''}
+                        <button class="btn btn-sm btn-primary mt-1" onclick="showItemDetails(${item.id})">View Details</button>
+                    </div>
+                `);
+                markers.push({ id: item.id, marker });
+            });
+            displayMapItems(mapItems);
+        }
+
+        function displayMapItems(items) {
+            const list = document.getElementById('mapItemsList');
+            list.innerHTML = '';
+            items.forEach(item => {
+                list.innerHTML += `
+                    <div class="card mb-3 map-item-card" data-id="${item.id}">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="badge bg-primary">${item.category}</span>
+                                ${item.price ? `<span class="fw-bold text-success">₹${item.price}</span>` : ''}
+                            </div>
+                            <h6 class="card-title">${item.title}</h6>
+                            <p class="small">${item.description}</p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <small class="text-muted"><i class="fas fa-map-marker-alt me-1"></i>${item.location}</small>
+                                <button class="btn btn-sm btn-outline-primary" onclick="showItemDetails(${item.id})">Details</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function showItemDetails(itemId) {
+            const item = mapItems.find(i => i.id === itemId);
+            if (!item) return;
+
+            document.getElementById('itemModalTitle').textContent = item.title;
+            document.getElementById('itemModalBody').innerHTML = `
+                ${item.image ? `<img src="${item.image}" class="img-fluid rounded mb-3">` : ''}
+                <p>${item.description}</p>
+                <p><strong>Category:</strong> ${item.category}</p>
+                ${item.price ? `<p><strong>Price:</strong> ₹${item.price}</p>` : ''}
+                <p><small class="text-muted"><i class="fas fa-map-marker-alt me-1"></i>${item.location}</small></p>
+                <p><small class="text-muted">Posted by ${item.user}</small></p>
+                <p><small class="text-muted">${item.timestamp}</small></p>
+            `;
+
+            // ✅ Update Chat button dynamically
+            const chatBtn = document.getElementById('chatWithSellerBtn');
+            chatBtn.href = `/chat/${item.user}/`;
+
+            const modal = new bootstrap.Modal(document.getElementById('itemDetailsModal'));
+            modal.show();
+
+            map.setView([item.lat, item.lng], 13);
+        }
+
+        function filterItems() {
+            const q = document.getElementById('mapSearchInput').value.toLowerCase();
+            const cat = document.getElementById('mapCategoryFilter').value;
+            const filtered = mapItems.filter(i =>
+                (i.title.toLowerCase().includes(q) || i.description.toLowerCase().includes(q) || i.location.toLowerCase().includes(q))
+                && (cat === '' || i.category === cat)
+            );
+            markers.forEach(m => map.removeLayer(m.marker));
+            filtered.forEach(f => {
+                const found = markers.find(m => m.id === f.id);
+                if (found) found.marker.addTo(map);
+            });
+            displayMapItems(filtered);
+            if (filtered.length) map.setView([filtered[0].lat, filtered[0].lng], 10);
+        }
+
+        document.getElementById('mapSearchInput').addEventListener('input', filterItems);
+        document.getElementById('mapCategoryFilter').addEventListener('change', filterItems);
+        document.addEventListener('DOMContentLoaded', initMap);
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

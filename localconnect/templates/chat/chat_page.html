@@ -1,0 +1,2586 @@
+{% extends 'base.html' %}
+{% comment %} {% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Page</title>
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+</head>
+<body>
+    <div class="chat-container">
+        <h1>Welcome, {{ user.username }}</h1>
+
+        <div class="chat-box">
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="message {% if message.sender == user %}sent{% else %}received{% endif %}">
+                        <p><strong>{{ message.sender.username }}:</strong> {{ message.text }}</p>
+                        <span class="timestamp">{{ message.timestamp|date:"H:i d M Y" }}</span>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p>No messages yet. Start the conversation!</p>
+            {% endif %}
+        </div>
+
+        <div class="chat-input">
+            <form action="{% url 'send_message' %}" method="post">
+                {% csrf_token %}
+                <input type="text" name="text" placeholder="Type your message..." required>
+                <button type="submit">Send</button>
+            </form>
+            
+        </div>
+
+        <div class="user-info">
+            {% if user.profile %}
+                {% with user.profile.bio as bio %}
+                    {% if bio %}
+                        <p>Bio: {{ bio }}</p>
+                    {% else %}
+                        <p>No bio available</p>
+                    {% endif %}
+                {% endwith %}
+            {% else %}
+                <p>Profile not found</p>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html> {% endcomment %}
+
+
+
+
+
+{% comment %} {% block content %}
+<div class="row">
+    <div class="col-md-4">
+        <h5>Users</h5>
+        <ul class="list-group">
+            {% for user in users %}
+            <li class="list-group-item">
+                <a href="{% url 'chat' user.username %}">{{ user.username }}</a>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    <div class="col-md-8">
+        {% if room %}
+        <h5>Chat with {{ other_user }}</h5>
+        <div class="border rounded p-3 mb-3" style="height:400px; overflow-y:scroll;">
+            {% for message in messages %}
+            <div class="mb-2 {% if message.sender == request.user %}text-end{% endif %}">
+                <b>{{ message.sender.username }}</b>: {{ message.content }} <small class="text-muted">{{ message.timestamp|timesince }} ago</small>
+            </div>
+            {% endfor %}
+        </div>
+        <form method="post">
+            {% csrf_token %}
+            <div class="input-group">
+                <input type="text" name="content" class="form-control" placeholder="Type a message...">
+                <button class="btn btn-primary">Send</button>
+            </div>
+        </form>
+        {% else %}
+        <p>Select a user to start chatting</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %} {% endcomment %}
+
+
+{% comment %} 
+{% block title %}Chat - LocalConnect{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Left: Chat Rooms / Users -->
+    <div class="col-md-4 mb-3">
+        <h5>Chats</h5>
+        <ul class="list-group">
+            {% for room, other, unread_count in chat_rooms %}
+            <li class="list-group-item d-flex justify-content-between align-items-center {% if other_user == other.username %}active{% endif %}">
+                <a href="{% url 'chat' other.username %}">{{ other.username }}</a>
+                {% if unread_count > 0 %}
+                    <span class="badge bg-danger rounded-pill">{{ unread_count }}</span>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+        <hr>
+        <h6>Start New Chat</h6>
+        <ul class="list-group">
+            {% for user in users %}
+            <li class="list-group-item">
+                <a href="{% url 'chat' user.username %}">{{ user.username }}</a>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <!-- Right: Chat Window -->
+    <div class="col-md-8">
+        {% if room %}
+            <h5>Chat with {{ other_user }}</h5>
+            <div id="chat-window" class="chat-window" style="height:400px; overflow-y:scroll; display:flex; flex-direction:column-reverse; padding:10px; background:#e5ddd5; border-radius:10px;">
+                {% for message in messages %}
+                    <div class="{% if message.sender == request.user %}sent-message{% else %}received-message{% endif %}" style="margin-bottom:5px; padding:5px 10px; border-radius:10px; max-width:70%; {% if message.sender == request.user %}background:#dcf8c6; text-align:right;{% else %}background:#fff; text-align:left; border:1px solid #ddd;{% endif %}">
+                        <b>{{ message.sender.username }}</b>: {{ message.content }}
+                        <br><small class="text-muted">{{ message.timestamp|timesince }} ago</small>
+                    </div>
+                {% endfor %}
+            </div>
+            <form method="post" class="mt-2">
+                {% csrf_token %}
+                <div class="input-group">
+                    <input type="text" name="content" class="form-control" placeholder="Type a message..." required>
+                    <button class="btn btn-primary">Send</button>
+                </div>
+            </form>
+            <script>
+                const chatWindow = document.getElementById('chat-window');
+                chatWindow.scrollTop = chatWindow.scrollHeight;
+            </script>
+        {% else %}
+            <p>Select a user to start chatting.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %} {% endcomment %}
+
+
+
+{% comment %} {% block title %}Chat - LocalConnect{% endblock %}
+
+{% block content %}
+<!-- Embedded CSS for chat -->
+<style>
+/* Chat bubbles */
+.message {
+    margin-bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    max-width: 70%;
+}
+
+.message.sent {
+    align-self: flex-end;
+    text-align: right;
+}
+
+.message.received {
+    align-self: flex-start;
+    text-align: left;
+}
+
+.message-content {
+    padding: 8px 12px;
+    border-radius: 15px;
+    display: inline-block;
+}
+
+.message.sent .message-content {
+    background-color: #dcf8c6; /* WhatsApp green */
+    color: #000;
+}
+
+.message.received .message-content {
+    background-color: #fff;
+    border: 1px solid #ddd;
+}
+
+/* Timestamp */
+.message-time {
+    font-size: 0.7rem;
+    color: gray;
+    margin-top: 2px;
+}
+</style>
+
+<div class="row">
+    <!-- Left: Chat Rooms / Users -->
+    <div class="col-md-4 mb-3">
+        <h5>Chats</h5>
+        <ul class="list-group">
+            {% for room, other, unread_count in chat_rooms %}
+            <li class="list-group-item d-flex justify-content-between align-items-center {% if other_user_obj and other_user_obj.username == other.username %}active{% endif %}">
+                <a href="{% url 'chat' other.username %}">{{ other.username }}</a>
+                {% if unread_count > 0 %}
+                    <span class="badge bg-danger rounded-pill">{{ unread_count }}</span>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+        <hr>
+        <h6>Start New Chat</h6>
+        <ul class="list-group">
+            {% for user in users %}
+            <li class="list-group-item">
+                <a href="{% url 'chat' user.username %}">{{ user.username }}</a>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <!-- Right: Chat Window -->
+    <div class="col-md-8 d-flex flex-column" style="height: 90vh;">
+        {% if room %}
+            <!-- Chat Header -->
+            {% if other_user_obj %}
+            <div class="d-flex align-items-center mb-2 p-2 border-bottom" style="background:#ededed; border-radius:10px 10px 0 0;">
+                {% if other_user_obj.profile.profile_image %}
+                    <img src="{{ other_user_obj.profile.profile_image.url }}" class="rounded-circle me-2" width="40" height="40">
+                {% else %}
+                    <img src="https://ui-avatars.com/api/?name={{ other_user_obj.username }}" class="rounded-circle me-2" width="40" height="40">
+                {% endif %}
+                <h6 class="mb-0">{{ other_user_obj.username }}</h6>
+            </div>
+            {% endif %}
+
+            <!-- Chat Messages -->
+            <div id="chat-window" class="flex-grow-1 overflow-auto p-3" style="background:#e5ddd5; display:flex; flex-direction:column;">
+                {% for message in messages %}
+                    <div class="message {% if message.sender == request.user %}sent{% else %}received{% endif %}">
+                        <div class="message-content">
+                            {{ message.content }}
+                        </div>
+                        <small class="text-muted message-time">{{ message.timestamp|timesince }} ago</small>
+                    </div>
+                {% endfor %}
+            </div>
+
+            <!-- Send Message -->
+            <form method="post" class="mt-2">
+                {% csrf_token %}
+                <div class="input-group">
+                    <input type="text" name="content" class="form-control" placeholder="Type a message..." required>
+                    <button class="btn btn-primary">Send</button>
+                </div>
+            </form>
+
+            <!-- Scroll to bottom -->
+            <script>
+                const chatWindow = document.getElementById('chat-window');
+                chatWindow.scrollTop = chatWindow.scrollHeight;
+            </script>
+
+        {% else %}
+            <p>Select a user to start chatting.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %} {% endcomment %}
+
+
+
+
+
+
+{% comment %} {% block title %}Chat - LocalConnect{% endblock %}
+
+{% block content %}
+<style>
+/* Chat Bubbles */
+.message {
+    margin-bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    max-width: 70%;
+}
+
+.message.sent {
+    align-self: flex-end;
+    text-align: right;
+}
+
+.message.received {
+    align-self: flex-start;
+    text-align: left;
+}
+
+.message-content {
+    padding: 8px 12px;
+    border-radius: 15px;
+    display: inline-block;
+}
+
+.message.sent .message-content {
+    background-color: #dcf8c6;
+    color: #000;
+}
+
+.message.received .message-content {
+    background-color: #fff;
+    border: 1px solid #ddd;
+}
+
+.message-time {
+    font-size: 0.7rem;
+    color: gray;
+    margin-top: 2px;
+}
+
+/* Left Chat List */
+.list-group-item {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+}
+
+.list-group-item.active {
+    background-color: #0d6efd !important;
+    color: #fff !important;
+    border-color: #0d6efd;
+}
+
+.list-group-item.active .chat-info {
+    color: #fff !important;
+}
+
+/* Chat info (name + last message) */
+.chat-info {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.chat-name {
+    font-weight: bold;
+    margin: 0;
+    font-size: 0.95rem;
+}
+
+.chat-preview {
+    font-size: 0.8rem;
+    color: gray;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Chat Header */
+.chat-header {
+    background: #ededed;
+    border-radius: 10px 10px 0 0;
+    padding: 0.5rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Chat Window Scroll */
+#chat-window {
+    background: #e5ddd5;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+/* Profile image in chat list */
+.chat-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    margin-right: 0.5rem;
+    flex-shrink: 0;
+}
+</style>
+
+<div class="row">
+    <!-- Left: Chat Rooms / Users -->
+    <div class="col-md-4 mb-3">
+        <h5>Chats</h5>
+        <ul class="list-group">
+            {% for room, other, unread_count in chat_rooms %}
+            <li class="list-group-item {% if other_user_obj and other_user_obj.username == other.username %}active{% endif %}">
+                <div class="d-flex align-items-center chat-info">
+                    {% if other.profile.profile_image %}
+                        <img src="{{ other.profile.profile_image.url }}" class="chat-avatar">
+                    {% else %}
+                        <img src="https://ui-avatars.com/api/?name={{ other.username }}" class="chat-avatar">
+                    {% endif %}
+                    <div>
+                        <p class="chat-name mb-0">{{ other.username }}</p>
+                         
+                        <p class="chat-preview mb-0">{{ room.messages.last.content|default:'' }}</p>
+                        
+                    </div>
+                </div>
+                {% if unread_count > 0 %}
+                    <span class="badge bg-danger rounded-pill">{{ unread_count }}</span>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+        <hr>
+        <h6>Start New Chat</h6>
+        <ul class="list-group">
+            {% for user in users %}
+            <li class="list-group-item d-flex align-items-center">
+                {% if user.profile.profile_image %}
+                    <img src="{{ user.profile.profile_image.url }}" class="chat-avatar">
+                {% else %}
+                    <img src="https://ui-avatars.com/api/?name={{ user.username }}" class="chat-avatar">
+                {% endif %}
+                <span>{{ user.username }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <!-- Right: Chat Window -->
+    <div class="col-md-8 d-flex flex-column" style="height: 90vh;">
+        {% if room %}
+            <!-- Chat Header -->
+            {% if other_user_obj %}
+            <div class="chat-header">
+                {% if other_user_obj.profile.profile_image %}
+                    <img src="{{ other_user_obj.profile.profile_image.url }}" class="rounded-circle" width="40" height="40">
+                {% else %}
+                    <img src="https://ui-avatars.com/api/?name={{ other_user_obj.username }}" class="rounded-circle" width="40" height="40">
+                {% endif %}
+                <h6 class="mb-0">{{ other_user_obj.username }}</h6>
+            </div>
+            {% endif %}
+
+            <!-- Chat Messages -->
+            <div id="chat-window" class="flex-grow-1 p-3">
+                {% for message in messages %}
+                    <div class="message {% if message.sender == request.user %}sent{% else %}received{% endif %}">
+                        <div class="message-content">
+                            {{ message.content }}
+                        </div>
+                        <small class="text-muted message-time">{{ message.timestamp|timesince }} ago</small>
+                    </div>
+                {% endfor %}
+            </div>
+
+            <!-- Send Message -->
+            <form method="post" class="mt-2">
+                {% csrf_token %}
+                <div class="input-group">
+                    <input type="text" name="content" class="form-control" placeholder="Type a message..." required>
+                    <button class="btn btn-primary">Send</button>
+                </div>
+            </form>
+
+            <!-- Scroll to bottom -->
+            <script>
+                const chatWindow = document.getElementById('chat-window');
+                chatWindow.scrollTop = chatWindow.scrollHeight;
+            </script>
+        {% else %}
+            <p>Select a user to start chatting.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %} {% endcomment %}
+
+
+
+
+
+
+{% comment %} {% block title %}Chat - LocalConnect{% endblock %}
+
+{% block content %}
+<style>
+/* Chat Bubbles */
+.message {
+    margin-bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    max-width: 70%;
+}
+
+.message.sent {
+    align-self: flex-end;
+    text-align: right;
+}
+
+.message.received {
+    align-self: flex-start;
+    text-align: left;
+}
+
+.message-content {
+    padding: 8px 12px;
+    border-radius: 15px;
+    display: inline-block;
+}
+
+.message.sent .message-content {
+    background-color: #dcf8c6;
+    color: #000;
+}
+
+.message.received .message-content {
+    background-color: #fff;
+    border: 1px solid #ddd;
+}
+
+.message-time {
+    font-size: 0.7rem;
+    color: gray;
+    margin-top: 2px;
+}
+
+/* Left Chat List */
+.list-group-item {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    border: none;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.list-group-item.active {
+    background-color: #989e9e37 !important;
+    color: #fff !important;
+}
+
+.list-group-item:hover {
+    background-color: #f2f2f2;
+}
+
+/* Chat info (name + last message) */
+.chat-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    overflow: hidden;
+}
+
+.chat-name {
+    font-weight: bold;
+    font-size: 0.95rem;
+    margin: 0;
+}
+
+.chat-preview {
+    font-size: 0.8rem;
+    color: gray;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Chat Header */
+.chat-header {
+    background: #ededed;
+    border-radius: 10px 10px 0 0;
+    padding: 0.5rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Chat Window Scroll */
+#chat-window {
+    background: #e5ddd5;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+/* Profile image in chat list */
+.chat-avatar {
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+</style>
+
+<div class="row">
+    <!-- Left: Chat Rooms / Users -->
+    <div class="col-md-4 mb-3">
+        <h5>Chats</h5>
+        <ul class="list-group">
+            {% for room, other, unread_count in chat_rooms %}
+            <a href="{% url 'chat' username=other.username %}" style="text-decoration: none;">
+                <li class="list-group-item {% if other_user_obj and other_user_obj.username == other.username %}active{% endif %}">
+                    <div class="chat-info">
+                        {% if other.profile.profile_image %}
+                            <img src="{{ other.profile.profile_image.url }}" class="chat-avatar">
+                        {% else %}
+                            <img src="https://ui-avatars.com/api/?name={{ other.username }}" class="chat-avatar">
+                        {% endif %}
+                        <div>
+                            <p class="chat-name mb-0 {% if other_user_obj and other_user_obj.username == other.username %}text-white{% endif %}">
+                                {{ other.username }}
+                            </p>
+                            {% if room.messages.last %}
+                                <p class="chat-preview mb-0">{{ room.messages.last.content|truncatechars:30 }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% if unread_count > 0 %}
+                        <span class="badge bg-danger rounded-pill">{{ unread_count }}</span>
+                    {% endif %}
+                </li>
+            </a>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <!-- Right: Chat Window -->
+    <div class="col-md-8 d-flex flex-column" style="height: 90vh;">
+        {% if room %}
+            <!-- Chat Header -->
+            {% if other_user_obj %}
+            <div class="chat-header">
+                {% if other_user_obj.profile.profile_image %}
+                    <img src="{{ other_user_obj.profile.profile_image.url }}" class="rounded-circle" width="45" height="45">
+                {% else %}
+                    <img src="https://ui-avatars.com/api/?name={{ other_user_obj.username }}" class="rounded-circle" width="45" height="45">
+                {% endif %}
+                <h6 class="mb-0">{{ other_user_obj.username }}</h6>
+            </div>
+            {% endif %}
+
+            <!-- Chat Messages -->
+            <div id="chat-window" class="flex-grow-1 p-3">
+                {% for message in messages %}
+                    <div class="message {% if message.sender == request.user %}sent{% else %}received{% endif %}">
+                        <div class="message-content">
+                            {{ message.content }}
+                        </div>
+                        <small class="text-muted message-time">{{ message.timestamp|timesince }} ago</small>
+                    </div>
+                {% endfor %}
+            </div>
+
+            <!-- Send Message -->
+            <form method="post" class="mt-2">
+                {% csrf_token %}
+                <div class="input-group">
+                    <input type="text" name="content" class="form-control" placeholder="Type a message..." required>
+                    <button class="btn btn-primary">Send</button>
+                </div>
+            </form>
+
+            <!-- Scroll to bottom -->
+            <script>
+                const chatWindow = document.getElementById('chat-window');
+                chatWindow.scrollTop = chatWindow.scrollHeight;
+            </script>
+        {% else %}
+            <p class="text-center text-muted mt-5">Select a user to start chatting 💬</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %} {% endcomment %}
+
+
+
+
+
+
+
+
+{% comment %} {% block title %}Chat - LocalConnect{% endblock %}
+
+{% block content %}
+<style>
+/* Chat Bubbles */
+.message {
+    margin-bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    max-width: 70%;
+}
+
+.message.sent {
+    align-self: flex-end;
+    text-align: right;
+}
+
+.message.received {
+    align-self: flex-start;
+    text-align: left;
+}
+
+.message-content {
+    padding: 8px 12px;
+    border-radius: 15px;
+    display: inline-block;
+}
+
+.message.sent .message-content {
+    background-color: #dcf8c6;
+    color: #000;
+}
+
+.message.received .message-content {
+    background-color: #fff;
+    border: 1px solid #ddd;
+}
+
+.message-time {
+    font-size: 0.7rem;
+    color: gray;
+    margin-top: 2px;
+}
+
+/* Left Chat List */
+.list-group-item {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    border: none;
+    border-bottom: 1px solid #f0f0f0;
+    background-color: #fff;
+    transition: background-color 0.2s ease;
+}
+
+.list-group-item:hover {
+    background-color: #f8f8f8;
+}
+
+.list-group-item.active {
+    background-color: #e0e0e0 !important; /* Light gray background */
+    color: #000 !important; /* Text becomes black */
+}
+
+/* Chat info (name + last message) */
+.chat-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    overflow: hidden;
+}
+
+.chat-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin: 0;
+    color: #000;
+}
+
+.chat-preview {
+    font-size: 0.8rem;
+    color: gray;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Chat Header */
+.chat-header {
+    background: #ededed;
+    border-radius: 10px 10px 0 0;
+    padding: 0.5rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Chat Window Scroll */
+#chat-window {
+    background: #e5ddd5;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+/* Profile image in chat list */
+.chat-avatar {
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+</style>
+
+<div class="row">
+    <!-- Left: Chat Rooms / Users -->
+    <div class="col-md-4 mb-3">
+        <h5>Chats</h5>
+        <ul class="list-group">
+            {% for room, other, unread_count in chat_rooms %}
+            <a href="{% url 'chat' username=other.username %}" style="text-decoration: none; color: inherit;">
+                <li class="list-group-item {% if other_user_obj and other_user_obj.username == other.username %}active{% endif %}">
+                    <div class="chat-info">
+                        {% if other.profile.profile_image %}
+                            <img src="{{ other.profile.profile_image.url }}" class="chat-avatar">
+                        {% else %}
+                            <img src="https://ui-avatars.com/api/?name={{ other.username }}" class="chat-avatar">
+                        {% endif %}
+                        <div>
+                            <p class="chat-name mb-0">{{ other.username }}</p>
+                            {% if room.messages.last %}
+                                <p class="chat-preview mb-0">{{ room.messages.last.content|truncatechars:30 }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% if unread_count > 0 %}
+                        <span class="badge bg-danger rounded-pill">{{ unread_count }}</span>
+                    {% endif %}
+                </li>
+            </a>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <!-- Right: Chat Window -->
+    <div class="col-md-8 d-flex flex-column" style="height: 80vh;">
+        {% if room %}
+            <!-- Chat Header -->
+            {% if other_user_obj %}
+            <div class="chat-header">
+                {% if other_user_obj.profile.profile_image %}
+                    <img src="{{ other_user_obj.profile.profile_image.url }}" class="rounded-circle" width="45" height="45">
+                {% else %}
+                    <img src="https://ui-avatars.com/api/?name={{ other_user_obj.username }}" class="rounded-circle" width="45" height="45">
+                {% endif %}
+                <h6 class="mb-0">{{ other_user_obj.username }}</h6>
+            </div>
+            {% endif %}
+
+            <!-- Chat Messages -->
+            <div id="chat-window" class="flex-grow-1 p-3">
+                {% for message in messages %}
+                    <div class="message {% if message.sender == request.user %}sent{% else %}received{% endif %}">
+                        <div class="message-content">
+                            {{ message.content }}
+                        </div>
+                        <small class="text-muted message-time">{{ message.timestamp|timesince }} ago</small>
+                    </div>
+                {% endfor %}
+            </div>
+
+            <!-- Send Message -->
+            <form method="post" class="mt-2">
+                {% csrf_token %}
+                <div class="input-group">
+                    <input type="text" name="content" class="form-control" placeholder="Type a message..." required>
+                    <button class="btn btn-primary">Send</button>
+                </div>
+            </form>
+
+            <!-- Scroll to bottom -->
+            <script>
+                const chatWindow = document.getElementById('chat-window');
+                chatWindow.scrollTop = chatWindow.scrollHeight;
+            </script>
+        {% else %}
+            <p class="text-center text-muted mt-5">Select a user to start chatting 💬</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %} {% endcomment %}
+
+
+
+
+
+
+
+
+
+
+
+
+{% comment %} {% block title %}Chat - LocalConnect{% endblock %}
+
+{% block content %}
+<style>
+/* Chat Bubbles */
+.message {
+    margin-bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    max-width: 70%;
+}
+
+.message.sent {
+    align-self: flex-end;
+    text-align: right;
+}
+
+.message.received {
+    align-self: flex-start;
+    text-align: left;
+}
+
+.message-content {
+    padding: 8px 12px;
+    border-radius: 15px;
+    display: inline-block;
+    word-wrap: break-word;
+    max-width: 100%;
+}
+
+.message.sent .message-content {
+    background-color: #dcf8c6;
+    color: #000;
+}
+
+.message.received .message-content {
+    background-color: #fff;
+    border: 1px solid #ddd;
+}
+
+.message-time {
+    font-size: 0.7rem;
+    color: gray;
+    margin-top: 2px;
+}
+
+/* Left Chat List */
+.list-group-item {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    border: none;
+    border-bottom: 1px solid #f0f0f0;
+    background-color: #fff;
+    transition: background-color 0.2s ease;
+}
+
+.list-group-item:hover {
+    background-color: #f8f8f8;
+}
+
+.list-group-item.active {
+    background-color: #e0e0e0 !important; /* Light gray background */
+    color: #000 !important; /* Text becomes black */
+}
+
+/* Chat info (name + last message) */
+.chat-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    overflow: hidden;
+}
+
+.chat-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin: 0;
+    color: #000;
+}
+
+.chat-preview {
+    font-size: 0.8rem;
+    color: gray;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Chat Header */
+.chat-header {
+    background: #ededed;
+    border-radius: 10px 10px 0 0;
+    padding: 0.5rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    justify-content: space-between;
+}
+
+/* Chat Window Scroll */
+#chat-window {
+    background: #e5ddd5;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+/* Profile image in chat list */
+.chat-avatar {
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* Search bar */
+#chat-search {
+    margin-bottom: 10px;
+}
+
+/* File input button */
+.custom-file-input {
+    display: none;
+}
+
+.upload-btn {
+    cursor: pointer;
+}
+</style>
+
+<div class="row">
+    <!-- Left: Chat Rooms / Users -->
+    <div class="col-md-4 mb-3">
+        <h5>Chats</h5>
+        <!-- Search bar -->
+        <input type="text" id="chat-search" class="form-control" placeholder="Search users...">
+        <ul class="list-group" id="chat-list">
+            {% for room, other, unread_count in chat_rooms %}
+            <a href="{% url 'chat' username=other.username %}" style="text-decoration: none; color: inherit;">
+                <li class="list-group-item {% if other_user_obj and other_user_obj.username == other.username %}active{% endif %}">
+                    <div class="chat-info">
+                        {% if other.profile.profile_image %}
+                            <img src="{{ other.profile.profile_image.url }}" class="chat-avatar">
+                        {% else %}
+                            <img src="https://ui-avatars.com/api/?name={{ other.username }}" class="chat-avatar">
+                        {% endif %}
+                        <div>
+                            <p class="chat-name mb-0">{{ other.username }}</p>
+                            {% if room.messages.last %}
+                                <p class="chat-preview mb-0">{{ room.messages.last.content|truncatechars:30 }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% if unread_count > 0 %}
+                        <span class="badge bg-danger rounded-pill">{{ unread_count }}</span>
+                    {% endif %}
+                </li>
+            </a>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <!-- Right: Chat Window -->
+    <div class="col-md-8 d-flex flex-column" style="height: 80vh;">
+        {% if room %}
+            <!-- Chat Header -->
+            {% if other_user_obj %}
+            <div class="chat-header">
+                <div class="d-flex align-items-center gap-2">
+                    {% if other_user_obj.profile.profile_image %}
+                        <img src="{{ other_user_obj.profile.profile_image.url }}" class="rounded-circle" width="45" height="45">
+                    {% else %}
+                        <img src="https://ui-avatars.com/api/?name={{ other_user_obj.username }}" class="rounded-circle" width="45" height="45">
+                    {% endif %}
+                    <h6 class="mb-0">{{ other_user_obj.username }}</h6>
+                </div>
+                <div>
+                    <!-- Delete Chat -->
+                    <form method="post" action="{% url 'delete_chat' username=other_user_obj.username %}" style="display:inline;">
+                        {% csrf_token %}
+                        <button class="btn btn-danger btn-sm">Delete Chat</button>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Chat Messages -->
+            <div id="chat-window" class="flex-grow-1 p-3">
+                {% for message in messages %}
+                    <div class="message {% if message.sender == request.user %}sent{% else %}received{% endif %}">
+                        <div class="message-content">
+                            {% if message.content %}{{ message.content }}{% endif %}
+                            {% if message.image %}<br><img src="{{ message.image.url }}" class="img-fluid mt-1" style="max-width:200px;">{% endif %}
+                            {% if message.document %}<br><a href="{{ message.document.url }}" target="_blank">{{ message.document.name|slice:":30" }}</a>{% endif %}
+                            {% if message.video %}<br>
+                                <video width="250" controls>
+                                    <source src="{{ message.video.url }}" type="video/mp4">
+                                    Your browser does not support the video tag.
+                                </video>
+                            {% endif %}
+                        </div>
+                        <small class="text-muted message-time">{{ message.timestamp|timesince }} ago</small>
+                    </div>
+                {% endfor %}
+            </div>
+
+            <!-- Send Message & Upload -->
+            <form method="post" enctype="multipart/form-data" class="mt-2">
+                {% csrf_token %}
+                <div class="input-group">
+                    <input type="text" name="content" class="form-control" placeholder="Type a message...">
+                    <label class="btn btn-secondary upload-btn mb-0">
+                        📎
+                        <input type="file" name="image" accept="image/*" class="custom-file-input">
+                        <input type="file" name="document" class="custom-file-input">
+                        <input type="file" name="video" accept="video/*" class="custom-file-input">
+                    </label>
+                    <button class="btn btn-primary">Send</button>
+                </div>
+            </form>
+
+            <!-- Scroll to bottom -->
+            <script>
+                const chatWindow = document.getElementById('chat-window');
+                chatWindow.scrollTop = chatWindow.scrollHeight;
+
+                // Search functionality
+                const chatSearch = document.getElementById('chat-search');
+                chatSearch.addEventListener('input', function() {
+                    const query = this.value.toLowerCase();
+                    const items = document.querySelectorAll('#chat-list li');
+                    items.forEach(item => {
+                        const name = item.querySelector('.chat-name').innerText.toLowerCase();
+                        if (name.includes(query)) item.parentElement.style.display = '';
+                        else item.parentElement.style.display = 'none';
+                    });
+                });
+            </script>
+        {% else %}
+            <p class="text-center text-muted mt-5">Select a user to start chatting 💬</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %} {% endcomment %}
+
+
+
+
+
+
+
+
+{% comment %} {% block title %}Chat - LocalConnect{% endblock %}
+
+{% block content %}
+<style>
+/* Chat Bubbles */
+.message {
+    margin-bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    max-width: 70%;
+}
+
+.message.sent {
+    align-self: flex-end;
+    text-align: right;
+}
+
+.message.received {
+    align-self: flex-start;
+    text-align: left;
+}
+
+.message-content {
+    padding: 8px 12px;
+    border-radius: 15px;
+    display: inline-block;
+}
+
+.message.sent .message-content {
+    background-color: #dcf8c6;
+    color: #000;
+}
+
+.message.received .message-content {
+    background-color: #fff;
+    border: 1px solid #ddd;
+}
+
+.message-time {
+    font-size: 0.7rem;
+    color: gray;
+    margin-top: 2px;
+}
+
+/* Left Chat List */
+.list-group-item {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    border: none;
+    border-bottom: 1px solid #f0f0f0;
+    background-color: #fff;
+    transition: background-color 0.2s ease;
+}
+
+.list-group-item:hover {
+    background-color: #f8f8f8;
+}
+
+.list-group-item.active {
+    background-color: #e0e0e0 !important;
+    color: #000 !important;
+}
+
+/* Chat info (name + last message) */
+.chat-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    overflow: hidden;
+}
+
+.chat-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin: 0;
+    color: #000;
+}
+
+.chat-preview {
+    font-size: 0.8rem;
+    color: gray;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Chat Header */
+.chat-header {
+    background: #ededed;
+    border-radius: 10px 10px 0 0;
+    padding: 0.5rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Chat Window Scroll */
+#chat-window {
+    background: #e5ddd5;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+/* Profile image in chat list */
+.chat-avatar {
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* Search box */
+#chat-search {
+    margin-bottom: 10px;
+}
+
+/* File preview */
+.message-content img, .message-content video {
+    max-width: 200px;
+    max-height: 200px;
+    display: block;
+}
+</style>
+
+<div class="row">
+    <!-- Left: Chat Rooms / Users -->
+    <div class="col-md-4 mb-3">
+        <h5>Chats</h5>
+        <input type="text" id="chat-search" class="form-control" placeholder="Search users...">
+
+        <ul class="list-group mt-2" id="chat-list">
+            {% for room, other, unread_count in chat_rooms %}
+            <a href="{% url 'chat' username=other.username %}" style="text-decoration: none; color: inherit;">
+                <li class="list-group-item {% if other_user_obj and other_user_obj.username == other.username %}active{% endif %}">
+                    <div class="chat-info">
+                        {% if other.profile.profile_image %}
+                            <img src="{{ other.profile.profile_image.url }}" class="chat-avatar">
+                        {% else %}
+                            <img src="https://ui-avatars.com/api/?name={{ other.username }}" class="chat-avatar">
+                        {% endif %}
+                        <div>
+                            <p class="chat-name mb-0">{{ other.username }}</p>
+                            {% if room.messages.last %}
+                                <p class="chat-preview mb-0">{{ room.messages.last.content|truncatechars:30 }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% if unread_count > 0 %}
+                        <span class="badge bg-danger rounded-pill">{{ unread_count }}</span>
+                    {% endif %}
+                </li>
+            </a>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <!-- Right: Chat Window -->
+    <div class="col-md-8 d-flex flex-column" style="height: 80vh;">
+        {% if room %}
+            <!-- Chat Header -->
+            {% if other_user_obj %}
+            <div class="chat-header justify-content-between">
+                <div class="d-flex align-items-center gap-2">
+                    {% if other_user_obj.profile.profile_image %}
+                        <img src="{{ other_user_obj.profile.profile_image.url }}" class="rounded-circle" width="45" height="45">
+                    {% else %}
+                        <img src="https://ui-avatars.com/api/?name={{ other_user_obj.username }}" class="rounded-circle" width="45" height="45">
+                    {% endif %}
+                    <h6 class="mb-0">{{ other_user_obj.username }}</h6>
+                </div>
+                <div>
+                    <a href="{% url 'delete_chat' username=other_user_obj.username %}" class="btn btn-sm btn-danger">Delete Chat</a>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Chat Messages -->
+            <div id="chat-window" class="flex-grow-1 p-3">
+                {% for message in messages %}
+                    <div class="message {% if message.sender == request.user %}sent{% else %}received{% endif %}">
+                        <div class="message-content">
+                            {% if message.content %}
+                                {{ message.content }}
+                            {% endif %}
+                            {% if message.image %}
+                                <img src="{{ message.image.url }}" alt="image">
+                            {% endif %}
+                            {% if message.video %}
+                                <video controls>
+                                    <source src="{{ message.video.url }}" type="video/mp4">
+                                    Your browser does not support video.
+                                </video>
+                            {% endif %}
+                            {% if message.document %}
+                                <a href="{{ message.document.url }}" class="document-link" target="_blank">
+                                    {{ message.document.name|cut:"chat_uploads/" }}
+                                </a>
+                            {% endif %}
+                        </div>
+                        <small class="text-muted message-time">{{ message.timestamp|timesince }} ago</small>
+                    </div>
+                {% endfor %}
+            </div>
+
+            <!-- Send Message -->
+            <form method="post" enctype="multipart/form-data" class="mt-2">
+                {% csrf_token %}
+                <div class="input-group">
+                    <input type="text" name="content" class="form-control" placeholder="Type a message...">
+                    <input type="file" name="image" accept="image/*" class="form-control">
+                    <input type="file" name="video" accept="video/*" class="form-control">
+                    <input type="file" name="document" class="form-control">
+                    <button class="btn btn-primary">Send</button>
+                </div>
+            </form>
+
+            <!-- Scroll to bottom -->
+            <script>
+                const chatWindow = document.getElementById('chat-window');
+                chatWindow.scrollTop = chatWindow.scrollHeight;
+
+                // Search functionality
+                const searchInput = document.getElementById('chat-search');
+                searchInput.addEventListener('input', function() {
+                    const filter = searchInput.value.toLowerCase();
+                    const items = document.querySelectorAll('#chat-list li');
+                    items.forEach(item => {
+                        const name = item.querySelector('.chat-name').textContent.toLowerCase();
+                        if (name.includes(filter)) {
+                            item.parentElement.style.display = '';
+                        } else {
+                            item.parentElement.style.display = 'none';
+                        }
+                    });
+                });
+            </script>
+        {% else %}
+            <p class="text-center text-muted mt-5">Select a user to start chatting 💬</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+ {% endcomment %}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+{% comment %} {% block title %}Chat - LocalConnect{% endblock %}
+
+{% block content %}
+<style>
+/* Chat Bubbles */
+.message {
+    margin-bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    max-width: 70%;
+}
+
+.message.sent {
+    align-self: flex-end;
+    text-align: right;
+}
+
+.message.received {
+    align-self: flex-start;
+    text-align: left;
+}
+
+.message-content {
+    padding: 8px 12px;
+    border-radius: 15px;
+    display: inline-block;
+    word-break: break-word;
+}
+
+.message.sent .message-content {
+    background-color: #dcf8c6;
+    color: #000;
+}
+
+.message.received .message-content {
+    background-color: #fff;
+    border: 1px solid #ddd;
+}
+
+.message-time {
+    font-size: 0.7rem;
+    color: gray;
+    margin-top: 2px;
+}
+
+/* Left Chat List */
+.list-group-item {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    border: none;
+    border-bottom: 1px solid #f0f0f0;
+    background-color: #fff;
+    transition: background-color 0.2s ease;
+}
+
+.list-group-item:hover {
+    background-color: #f8f8f8;
+}
+
+.list-group-item.active {
+    background-color: #e0e0e0 !important;
+    color: #000 !important;
+}
+
+/* Chat info */
+.chat-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    overflow: hidden;
+}
+
+.chat-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin: 0;
+    color: #000;
+}
+
+.chat-preview {
+    font-size: 0.8rem;
+    color: gray;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Chat Header */
+.chat-header {
+    background: #ededed;
+    border-radius: 10px 10px 0 0;
+    padding: 0.5rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Chat Window Scroll */
+#chat-window {
+    background: #e5ddd5;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    padding: 10px;
+}
+
+/* Profile image in chat list */
+.chat-avatar {
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* File upload button */
+.attach-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #f0f0f0;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 5px;
+    cursor: pointer;
+    position: relative;
+}
+
+.attach-dropdown {
+    position: absolute;
+    bottom: 50px;
+    left: 0;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    display: none;
+    flex-direction: column;
+    z-index: 10;
+}
+
+.attach-dropdown button {
+    border: none;
+    background: none;
+    padding: 5px 10px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.attach-dropdown button:hover {
+    background-color: #f0f0f0;
+}
+
+</style>
+
+<div class="row">
+    <!-- Left: Chat Rooms / Users -->
+    <div class="col-md-4 mb-3">
+        <h5>Chats</h5>
+
+        <!-- Search Bar -->
+        <form method="get" class="mb-2">
+            <input type="text" name="search" class="form-control" placeholder="Search users..." value="{{ request.GET.search }}">
+        </form>
+
+        <ul class="list-group">
+            {% for user in users %}
+                {% if user != request.user %}
+                {% with room=chat_rooms_dict.user.id %}
+                <a href="{% url 'chat' username=user.username %}" style="text-decoration: none; color: inherit;">
+                    <li class="list-group-item {% if other_user_obj and other_user_obj.username == user.username %}active{% endif %}">
+                        <div class="chat-info">
+                            {% if user.profile.profile_image %}
+                                <img src="{{ user.profile.profile_image.url }}" class="chat-avatar">
+                            {% else %}
+                                <img src="https://ui-avatars.com/api/?name={{ user.username }}" class="chat-avatar">
+                            {% endif %}
+                            <div>
+                                <p class="chat-name mb-0">{{ user.username }}</p>
+                                {% if room %}
+                                    {% if room.messages.last %}
+                                    <p class="chat-preview mb-0">{{ room.messages.last.content|truncatechars:30 }}</p>
+                                    {% endif %}
+                                {% endif %}
+                            </div>
+                        </div>
+                    </li>
+                </a>
+                {% endwith %}
+                {% endif %}
+            {% endfor %}
+        </ul>
+    </div>
+
+    <!-- Right: Chat Window -->
+    <div class="col-md-8 d-flex flex-column" style="height: 80vh;">
+        {% if room %}
+            <!-- Chat Header -->
+            {% if other_user_obj %}
+            <div class="chat-header">
+                {% if other_user_obj.profile.profile_image %}
+                    <img src="{{ other_user_obj.profile.profile_image.url }}" class="rounded-circle" width="45" height="45">
+                {% else %}
+                    <img src="https://ui-avatars.com/api/?name={{ other_user_obj.username }}" class="rounded-circle" width="45" height="45">
+                {% endif %}
+                <h6 class="mb-0">{{ other_user_obj.username }}</h6>
+            </div>
+            {% endif %}
+
+            <!-- Chat Messages -->
+            <div id="chat-window" class="flex-grow-1">
+                {% for message in messages %}
+                    <div class="message {% if message.sender == request.user %}sent{% else %}received{% endif %}">
+                        <div class="message-content">
+                            {% if message.content %}{{ message.content }}{% endif %}
+                            {% if message.image %}
+                                <img src="{{ message.image.url }}" class="img-fluid mt-1 rounded">
+                            {% endif %}
+                            {% if message.video %}
+                                <video controls class="img-fluid mt-1 rounded">
+                                    <source src="{{ message.video.url }}" type="video/mp4">
+                                </video>
+                            {% endif %}
+                            {% if message.document %}
+                                <a href="{{ message.document.url }}" target="_blank">{{ message.document.name|cut:"chat_uploads/" }}</a>
+                            {% endif %}
+                        </div>
+                        <small class="text-muted message-time">{{ message.timestamp|timesince }} ago</small>
+                    </div>
+                {% endfor %}
+            </div>
+
+            <!-- Send Message -->
+            <form method="post" enctype="multipart/form-data" class="mt-2 d-flex align-items-center">
+                {% csrf_token %}
+                <button type="button" class="attach-btn" id="attachBtn">
+                    <i class="fas fa-plus"></i>
+                    <div class="attach-dropdown" id="attachDropdown">
+                        <label>
+                            <input type="file" name="image" accept="image/*" style="display:none;">
+                            📷 Image
+                        </label>
+                        <label>
+                            <input type="file" name="video" accept="video/*" style="display:none;">
+                            🎥 Video
+                        </label>
+                        <label>
+                            <input type="file" name="document" style="display:none;">
+                            📄 Document
+                        </label>
+                    </div>
+                </button>
+                <input type="text" name="content" class="form-control me-2" placeholder="Type a message..." required>
+                <button class="btn btn-primary">Send</button>
+            </form>
+
+            <!-- Scroll to bottom -->
+            <script>
+                const chatWindow = document.getElementById('chat-window');
+                chatWindow.scrollTop = chatWindow.scrollHeight;
+
+                // Attach dropdown toggle
+                const attachBtn = document.getElementById('attachBtn');
+                const attachDropdown = document.getElementById('attachDropdown');
+                attachBtn.addEventListener('click', () => {
+                    attachDropdown.style.display = attachDropdown.style.display === 'flex' ? 'none' : 'flex';
+                });
+            </script>
+
+        {% else %}
+            <p class="text-center text-muted mt-5">Select a user to start chatting 💬</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %} {% endcomment %}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+{% comment %} {% block title %}Chat - LocalConnect{% endblock %}
+
+{% block content %}
+<style>
+/* Chat Bubbles */
+.message {
+    margin-bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    max-width: 70%;
+}
+
+.message.sent {
+    align-self: flex-end;
+    text-align: right;
+}
+
+.message.received {
+    align-self: flex-start;
+    text-align: left;
+}
+
+.message-content {
+    padding: 8px 12px;
+    border-radius: 15px;
+    display: inline-block;
+    word-break: break-word;
+}
+
+.message.sent .message-content {
+    background-color: #dcf8c6;
+    color: #000;
+}
+
+.message.received .message-content {
+    background-color: #fff;
+    border: 1px solid #ddd;
+}
+
+.message-time {
+    font-size: 0.7rem;
+    color: gray;
+    margin-top: 2px;
+}
+
+/* Left Chat List */
+.list-group-item {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    border: none;
+    border-bottom: 1px solid #f0f0f0;
+    background-color: #fff;
+    transition: background-color 0.2s ease;
+}
+
+.list-group-item:hover {
+    background-color: #f8f8f8;
+}
+
+.list-group-item.active {
+    background-color: #e0e0e0 !important;
+    color: #000 !important;
+}
+
+/* Chat info (name + last message) */
+.chat-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    overflow: hidden;
+}
+
+.chat-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin: 0;
+    color: #000;
+}
+
+.chat-preview {
+    font-size: 0.8rem;
+    color: gray;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Chat Header */
+.chat-header {
+    background: #ededed;
+    border-radius: 10px 10px 0 0;
+    padding: 0.5rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    justify-content: space-between;
+}
+
+/* Chat Window Scroll */
+#chat-window {
+    background: #e5ddd5;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+/* Profile image in chat list */
+.chat-avatar {
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* Attachment menu */
+#attachment-menu label {
+    cursor: pointer;
+}
+
+#attachment-menu input {
+    display: none;
+}
+
+/* Search bar */
+#chat-search {
+    margin-bottom: 0.5rem;
+}
+</style>
+
+<div class="row">
+    <!-- Left: Chat Rooms / Users -->
+    <div class="col-md-4 mb-3">
+        <h5>Chats</h5>
+        <input type="text" id="chat-search" class="form-control" placeholder="Search users...">
+        <ul class="list-group" id="chat-list">
+            {% for room, other, last_msg, unread_count in chat_rooms %}
+            <a href="{% url 'chat' username=other.username %}" style="text-decoration: none; color: inherit;">
+                <li class="list-group-item {% if other_user_obj and other_user_obj.username == other.username %}active{% endif %}">
+                    <div class="chat-info">
+                        {% if other.profile.profile_image %}
+                            <img src="{{ other.profile.profile_image.url }}" class="chat-avatar">
+                        {% else %}
+                            <img src="https://ui-avatars.com/api/?name={{ other.username }}" class="chat-avatar">
+                        {% endif %}
+                        <div>
+                            <p class="chat-name mb-0">{{ other.username }}</p>
+                            {% if last_msg %}
+                                <p class="chat-preview mb-0">{{ last_msg.content|default:"Sent a file"|truncatechars:30 }}</p>
+                            {% else %}
+                                <p class="chat-preview mb-0 text-muted">Start chat</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% if unread_count > 0 %}
+                        <span class="badge bg-danger rounded-pill">{{ unread_count }}</span>
+                    {% endif %}
+                </li>
+            </a>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <!-- Right: Chat Window -->
+    <div class="col-md-8 d-flex flex-column" style="height: 80vh;">
+        {% if room %}
+            <!-- Chat Header -->
+            {% if other_user_obj %}
+            <div class="chat-header">
+                <div class="d-flex align-items-center gap-2">
+                    {% if other_user_obj.profile.profile_image %}
+                        <img src="{{ other_user_obj.profile.profile_image.url }}" class="rounded-circle" width="45" height="45">
+                    {% else %}
+                        <img src="https://ui-avatars.com/api/?name={{ other_user_obj.username }}" class="rounded-circle" width="45" height="45">
+                    {% endif %}
+                    <h6 class="mb-0">{{ other_user_obj.username }}</h6>
+                </div>
+                <a href="{% url 'delete_chat' username=other_user_obj.username %}" class="btn btn-sm btn-outline-danger">Delete Chat</a>
+            </div>
+            {% endif %}
+
+            <!-- Chat Messages -->
+            <div id="chat-window" class="flex-grow-1 p-3">
+                {% for message in messages %}
+                    <div class="message {% if message.sender == request.user %}sent{% else %}received{% endif %}">
+                        <div class="message-content">
+                            {% if message.content %}
+                                {{ message.content }}
+                            {% endif %}
+                            {% if message.image %}
+                                <img src="{{ message.image.url }}" alt="image" class="img-fluid rounded mb-1">
+                            {% endif %}
+                            {% if message.video %}
+                                <video controls class="w-100 mb-1">
+                                    <source src="{{ message.video.url }}" type="video/mp4">
+                                    Your browser does not support video.
+                                </video>
+                            {% endif %}
+                            {% if message.document %}
+                                <a href="{{ message.document.url }}" target="_blank" class="d-block text-decoration-none">
+                                    {{ message.document.name|cut:"chat_uploads/"|cut:message.sender.username|slice:"1:" }}
+                                </a>
+                            {% endif %}
+                        </div>
+                        <small class="text-muted message-time">{{ message.timestamp|timesince }} ago</small>
+                    </div>
+                {% endfor %}
+            </div>
+
+            <!-- Send Message -->
+            <form method="post" enctype="multipart/form-data" class="mt-2">
+                {% csrf_token %}
+                <div class="input-group">
+                    <input type="text" name="content" class="form-control" placeholder="Type a message...">
+
+                    <!-- Attachment dropdown -->
+                    <div class="input-group-text position-relative">
+                        <button type="button" class="btn btn-light" id="attachment-btn">+</button>
+                        <div id="attachment-menu" class="position-absolute bg-white border rounded p-2" style="display:none; right:0; bottom:35px; z-index:1000;">
+                            <label class="d-block mb-1">📷 Image
+                                <input type="file" name="image" accept="image/*">
+                            </label>
+                            <label class="d-block mb-1">🎬 Video
+                                <input type="file" name="video" accept="video/*">
+                            </label>
+                            <label class="d-block">📄 Document
+                                <input type="file" name="document">
+                            </label>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary">Send</button>
+                </div>
+            </form>
+
+            <!-- Scroll to bottom -->
+            <script>
+                const chatWindow = document.getElementById('chat-window');
+                chatWindow.scrollTop = chatWindow.scrollHeight;
+
+                const attachmentBtn = document.getElementById('attachment-btn');
+                const attachmentMenu = document.getElementById('attachment-menu');
+
+                attachmentBtn.addEventListener('click', () => {
+                    attachmentMenu.style.display = attachmentMenu.style.display === 'none' ? 'block' : 'none';
+                });
+
+                document.addEventListener('click', function(event) {
+                    if (!attachmentMenu.contains(event.target) && event.target !== attachmentBtn) {
+                        attachmentMenu.style.display = 'none';
+                    }
+                });
+
+                // Search functionality
+                const chatSearch = document.getElementById('chat-search');
+                chatSearch.addEventListener('input', function() {
+                    const filter = this.value.toLowerCase();
+                    document.querySelectorAll('#chat-list li').forEach(function(li) {
+                        const name = li.querySelector('.chat-name').textContent.toLowerCase();
+                        li.parentElement.style.display = name.includes(filter) ? '' : 'none';
+                    });
+                });
+            </script>
+        {% else %}
+            <p class="text-center text-muted mt-5">Select a user to start chatting 💬</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %} {% endcomment %}
+
+
+
+
+
+
+
+
+
+
+
+
+
+{% comment %} {% block title %}Chat - LocalConnect{% endblock %}
+
+{% block content %}
+<style>
+/* Chat Bubbles */
+.message {
+    margin-bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    max-width: 70%;
+}
+
+.message.sent {
+    align-self: flex-end;
+    text-align: right;
+}
+
+.message.received {
+    align-self: flex-start;
+    text-align: left;
+}
+
+.message-content {
+    padding: 8px 12px;
+    border-radius: 15px;
+    display: inline-block;
+    word-break: break-word;
+}
+
+.message.sent .message-content {
+    background-color: #dcf8c6;
+    color: #000;
+}
+
+.message.received .message-content {
+    background-color: #fff;
+    border: 1px solid #ddd;
+}
+
+.message-time {
+    font-size: 0.7rem;
+    color: gray;
+    margin-top: 2px;
+}
+
+/* Left Chat List */
+.list-group-item {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    border: none;
+    border-bottom: 1px solid #f0f0f0;
+    background-color: #fff;
+    transition: background-color 0.2s ease;
+}
+
+.list-group-item:hover {
+    background-color: #f8f8f8;
+}
+
+.list-group-item.active {
+    background-color: #e0e0e0 !important;
+    color: #000 !important;
+}
+
+/* Chat info (name + last message) */
+.chat-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    overflow: hidden;
+}
+
+.chat-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin: 0;
+    color: #000;
+}
+
+.chat-preview {
+    font-size: 0.8rem;
+    color: gray;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Chat Header */
+.chat-header {
+    background: #ededed;
+    border-radius: 10px 10px 0 0;
+    padding: 0.5rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    justify-content: space-between;
+}
+
+/* Chat Window Scroll */
+#chat-window {
+    background: #e5ddd5;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+/* Profile image in chat list */
+.chat-avatar {
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* Attachment menu */
+#attachment-menu label {
+    cursor: pointer;
+}
+
+#attachment-menu input {
+    display: none;
+}
+
+/* Search bar */
+#chat-search {
+    margin-bottom: 0.5rem;
+}
+</style>
+
+<div class="row">
+    <!-- Left: Chat Rooms / Users -->
+    <div class="col-md-4 mb-3">
+        <h5>Chats</h5>
+        <input type="text" id="chat-search" class="form-control" placeholder="Search users...">
+        <ul class="list-group" id="chat-list">
+            {% for room, other, last_msg, unread_count in chat_rooms %}
+            <a href="{% url 'chat' username=other.username %}" style="text-decoration: none; color: inherit;">
+                <li class="list-group-item chat-item {% if not last_msg %}start-chat{% endif %} {% if other_user_obj and other_user_obj.username == other.username %}active{% endif %}">
+                    <div class="chat-info">
+                        {% if other.profile.profile_image %}
+                            <img src="{{ other.profile.profile_image.url }}" class="chat-avatar">
+                        {% else %}
+                            <img src="https://ui-avatars.com/api/?name={{ other.username }}" class="chat-avatar">
+                        {% endif %}
+                        <div>
+                            <p class="chat-name mb-0">{{ other.username }}</p>
+                            {% if last_msg %}
+                                <p class="chat-preview mb-0">{{ last_msg.content|default:"Sent a file"|truncatechars:30 }}</p>
+                            {% else %}
+                                <p class="chat-preview mb-0 text-muted">Start chat</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% if unread_count > 0 %}
+                        <span class="badge bg-danger rounded-pill">{{ unread_count }}</span>
+                    {% endif %}
+                </li>
+            </a>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <!-- Right: Chat Window -->
+    <div class="col-md-8 d-flex flex-column" style="height: 80vh;">
+        {% if room %}
+            <!-- Chat Header -->
+            {% if other_user_obj %}
+            <div class="chat-header">
+                <div class="d-flex align-items-center gap-2">
+                    {% if other_user_obj.profile.profile_image %}
+                        <img src="{{ other_user_obj.profile.profile_image.url }}" class="rounded-circle" width="45" height="45">
+                    {% else %}
+                        <img src="https://ui-avatars.com/api/?name={{ other_user_obj.username }}" class="rounded-circle" width="45" height="45">
+                    {% endif %}
+                    <h6 class="mb-0">{{ other_user_obj.username }}</h6>
+                </div>
+                <a href="{% url 'delete_chat' username=other_user_obj.username %}" class="btn btn-sm btn-outline-danger">Delete Chat</a>
+            </div>
+            {% endif %}
+
+            <!-- Chat Messages -->
+            <div id="chat-window" class="flex-grow-1 p-3">
+                {% for message in messages %}
+                    <div class="message {% if message.sender == request.user %}sent{% else %}received{% endif %}">
+                        <div class="message-content">
+                            {% if message.content %}
+                                {{ message.content }}
+                            {% endif %}
+                            {% if message.image %}
+                                <img src="{{ message.image.url }}" alt="image" class="img-fluid rounded mb-1">
+                            {% endif %}
+                            {% if message.video %}
+                                <video controls class="w-100 mb-1">
+                                    <source src="{{ message.video.url }}" type="video/mp4">
+                                    Your browser does not support video.
+                                </video>
+                            {% endif %}
+                            {% if message.document %}
+                                <a href="{{ message.document.url }}" target="_blank" class="d-block text-decoration-none">
+                                    {{ message.document.name|slice:"19:" }} <!-- removes chat_uploads/user/ -->
+                                </a>
+                            {% endif %}
+                        </div>
+                        <small class="text-muted message-time">{{ message.timestamp|timesince }} ago</small>
+                    </div>
+                {% endfor %}
+            </div>
+
+            <!-- Send Message -->
+            <form method="post" enctype="multipart/form-data" class="mt-2">
+                {% csrf_token %}
+                <div class="input-group">
+                    <input type="text" name="content" class="form-control" placeholder="Type a message...">
+
+                    <!-- Attachment dropdown -->
+                    <div class="input-group-text position-relative">
+                        <button type="button" class="btn btn-light" id="attachment-btn">+</button>
+                        <div id="attachment-menu" class="position-absolute bg-white border rounded p-2" style="display:none; right:0; bottom:35px; z-index:1000;">
+                            <label class="d-block mb-1">📷 Image
+                                <input type="file" name="image" accept="image/*">
+                            </label>
+                            <label class="d-block mb-1">🎬 Video
+                                <input type="file" name="video" accept="video/*">
+                            </label>
+                            <label class="d-block">📄 Document
+                                <input type="file" name="document">
+                            </label>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary">Send</button>
+                </div>
+            </form>
+
+            <!-- Scroll to bottom & JS -->
+            <script>
+                const chatWindow = document.getElementById('chat-window');
+                chatWindow.scrollTop = chatWindow.scrollHeight;
+
+                const attachmentBtn = document.getElementById('attachment-btn');
+                const attachmentMenu = document.getElementById('attachment-menu');
+
+                attachmentBtn.addEventListener('click', () => {
+                    attachmentMenu.style.display = attachmentMenu.style.display === 'none' ? 'block' : 'none';
+                });
+
+                document.addEventListener('click', function(event) {
+                    if (!attachmentMenu.contains(event.target) && event.target !== attachmentBtn) {
+                        attachmentMenu.style.display = 'none';
+                    }
+                });
+
+                // Search functionality
+                const chatSearch = document.getElementById('chat-search');
+                chatSearch.addEventListener('input', function() {
+                    const filter = this.value.toLowerCase();
+                    document.querySelectorAll('#chat-list li').forEach(function(li) {
+                        const name = li.querySelector('.chat-name').textContent.toLowerCase();
+                        const isStartChat = li.classList.contains('start-chat');
+
+                        if (name.includes(filter)) {
+                            li.parentElement.style.display = '';
+                        } else {
+                            li.parentElement.style.display = 'none';
+                        }
+
+                        // Hide start-chat users if search is empty
+                        if (!filter && isStartChat) {
+                            li.parentElement.style.display = 'none';
+                        }
+                    });
+                });
+            </script>
+        {% else %}
+            <p class="text-center text-muted mt-5">Select a user to start chatting 💬</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %} {% endcomment %}
+
+
+
+
+
+
+
+
+
+{% block title %}Chat - LocalConnect{% endblock %}
+
+{% block content %}
+<style>
+/* Chat Bubbles */
+.message {
+    margin-bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    max-width: 70%;
+    word-break: break-word;
+}
+
+.message.sent {
+    align-self: flex-end;
+    text-align: right;
+}
+
+.message.received {
+    align-self: flex-start;
+    text-align: left;
+}
+
+.message-content {
+    padding: 8px 12px;
+    border-radius: 15px;
+    display: inline-block;
+}
+
+.message.sent .message-content {
+    background-color: #dcf8c6;
+    color: #000;
+}
+
+.message.received .message-content {
+    background-color: #fff;
+    border: 1px solid #ddd;
+}
+
+.message-time {
+    font-size: 0.7rem;
+    color: gray;
+    margin-top: 2px;
+}
+
+/* Left Chat List */
+.list-group-item {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    border: none;
+    border-bottom: 1px solid #f0f0f0;
+    background-color: #fff;
+    transition: background-color 0.2s ease;
+}
+
+.list-group-item:hover {
+    background-color: #f8f8f8;
+}
+
+.list-group-item.active {
+    background-color: #e0e0e0 !important;
+    color: #000 !important;
+}
+
+/* Chat info (name + last message) */
+.chat-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    overflow: hidden;
+}
+
+.chat-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin: 0;
+    color: #000;
+}
+
+.chat-preview {
+    font-size: 0.8rem;
+    color: gray;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Chat Header */
+.chat-header {
+    background: #ededed;
+    border-radius: 10px 10px 0 0;
+    padding: 0.5rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    justify-content: space-between;
+}
+
+/* Chat Window Scroll */
+#chat-window {
+    background: #e5ddd5;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+/* Profile image in chat list */
+.chat-avatar {
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* Attachment menu */
+#attachment-menu label {
+    cursor: pointer;
+}
+
+#attachment-menu input {
+    display: none;
+}
+
+/* Search bar */
+#chat-search {
+    margin-bottom: 0.5rem;
+}
+</style>
+
+<div class="row">
+    <!-- Left: Chat Rooms / Users -->
+    <div class="col-md-4 mb-3">
+        <h5>Chats</h5>
+        <input type="text" id="chat-search" class="form-control" placeholder="Search users...">
+        <ul class="list-group" id="chat-list">
+            {% for room, other, last_msg, unread_count in chat_rooms %}
+                <a href="{% url 'chat' username=other.username %}" style="text-decoration: none; color: inherit;">
+                    <li class="list-group-item chat-item {% if not last_msg %}start-chat{% endif %} {% if other_user_obj and other_user_obj.username == other.username %}active{% endif %}">
+                        <div class="chat-info">
+                            {% if other.profile.profile_image %}
+                                <img src="{{ other.profile.profile_image.url }}" class="chat-avatar">
+                            {% else %}
+                                <img src="https://ui-avatars.com/api/?name={{ other.username }}" class="chat-avatar">
+                            {% endif %}
+                            <div>
+                                <p class="chat-name mb-0">{{ other.username }}</p>
+                                {% if last_msg %}
+                                    <p class="chat-preview mb-0">{{ last_msg.content|default:"Sent a file"|truncatechars:30 }}</p>
+                                {% else %}
+                                    <p class="chat-preview mb-0 text-muted">Start chat</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% if unread_count > 0 %}
+                            <span class="badge bg-danger rounded-pill">{{ unread_count }}</span>
+                        {% endif %}
+                    </li>
+                </a>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <!-- Right: Chat Window -->
+    <div class="col-md-8 d-flex flex-column" style="height: 80vh;">
+        {% if room %}
+            <!-- Chat Header -->
+            {% if other_user_obj %}
+            <div class="chat-header">
+                <div class="d-flex align-items-center gap-2">
+                    {% if other_user_obj.profile.profile_image %}
+                        <img src="{{ other_user_obj.profile.profile_image.url }}" class="rounded-circle" width="45" height="45">
+                    {% else %}
+                        <img src="https://ui-avatars.com/api/?name={{ other_user_obj.username }}" class="rounded-circle" width="45" height="45">
+                    {% endif %}
+                    <h6 class="mb-0">{{ other_user_obj.username }}</h6>
+                </div>
+                <a href="{% url 'delete_chat' username=other_user_obj.username %}" class="btn btn-sm btn-outline-danger">Delete Chat</a>
+            </div>
+            {% endif %}
+
+            <!-- Chat Messages -->
+            <div id="chat-window" class="flex-grow-1 p-3">
+                {% for message in messages %}
+                    <div class="message {% if message.sender == request.user %}sent{% else %}received{% endif %}">
+                        <div class="message-content">
+                            {% if message.content %}
+                                {{ message.content }}
+                            {% endif %}
+                            {% if message.image %}
+                                <img src="{{ message.image.url }}" alt="image" class="img-fluid rounded mb-1">
+                            {% endif %}
+                            {% if message.video %}
+                                <video controls class="w-100 mb-1">
+                                    <source src="{{ message.video.url }}" type="video/mp4">
+                                    Your browser does not support video.
+                                </video>
+                            {% endif %}
+                            {% if message.document %}
+                                <a href="{{ message.document.url }}" target="_blank" class="d-block text-decoration-none">
+                                    {{ message.document.name|cut:"chat_uploads/"|cut:message.sender.username|slice:"1:" }}
+                                </a>
+                            {% endif %}
+                        </div>
+                        <small class="text-muted message-time">{{ message.timestamp|timesince }} ago</small>
+                    </div>
+                {% endfor %}
+            </div>
+
+            <!-- Send Message -->
+            <form method="post" enctype="multipart/form-data" class="mt-2">
+                {% csrf_token %}
+                <div class="input-group">
+                    <input type="text" name="content" class="form-control" placeholder="Type a message...">
+
+                    <!-- Attachment dropdown -->
+                    <div class="input-group-text position-relative">
+                        <button type="button" class="btn btn-light" id="attachment-btn">+</button>
+                        <div id="attachment-menu" class="position-absolute bg-white border rounded p-2" style="display:none; right:0; bottom:35px; z-index:1000;">
+                            <label class="d-block mb-1">📷 Image
+                                <input type="file" name="image" accept="image/*">
+                            </label>
+                            <label class="d-block mb-1">🎬 Video
+                                <input type="file" name="video" accept="video/*">
+                            </label>
+                            <label class="d-block">📄 Document
+                                <input type="file" name="document">
+                            </label>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary">Send</button>
+                </div>
+            </form>
+
+            <!-- Scroll to bottom & JS -->
+            <script>
+                const chatWindow = document.getElementById('chat-window');
+                chatWindow.scrollTop = chatWindow.scrollHeight;
+
+                const attachmentBtn = document.getElementById('attachment-btn');
+                const attachmentMenu = document.getElementById('attachment-menu');
+
+                attachmentBtn.addEventListener('click', () => {
+                    attachmentMenu.style.display = attachmentMenu.style.display === 'none' ? 'block' : 'none';
+                });
+
+                document.addEventListener('click', function(event) {
+                    if (!attachmentMenu.contains(event.target) && event.target !== attachmentBtn) {
+                        attachmentMenu.style.display = 'none';
+                    }
+                });
+
+                // Search functionality
+                const chatSearch = document.getElementById('chat-search');
+                chatSearch.addEventListener('input', function() {
+                    const filter = this.value.toLowerCase();
+
+                    document.querySelectorAll('#chat-list li').forEach(function(li) {
+                        const name = li.querySelector('.chat-name').textContent.toLowerCase();
+
+                        if (!filter) {
+                            // Hide users with no messages except active
+                            if (li.classList.contains('start-chat') && !li.classList.contains('active')) {
+                                li.parentElement.style.display = 'none';
+                            } else {
+                                li.parentElement.style.display = '';
+                            }
+                        } else {
+                            li.parentElement.style.display = name.includes(filter) ? '' : 'none';
+                        }
+                    });
+                });
+
+                // Trigger input on page load to hide "start chat" users
+                chatSearch.dispatchEvent(new Event('input'));
+            </script>
+
+        {% else %}
+            <p class="text-center text-muted mt-5">Select a user to start chatting 💬</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
